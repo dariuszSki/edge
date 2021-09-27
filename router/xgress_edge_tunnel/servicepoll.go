@@ -16,15 +16,16 @@
 package xgress_edge_tunnel
 
 import (
+	"reflect"
+	"sync"
+	"sync/atomic"
+	"time"
+
 	"github.com/openziti/edge/tunnel/intercept"
 	"github.com/openziti/sdk-golang/ziti"
 	"github.com/openziti/sdk-golang/ziti/edge"
 	cmap "github.com/orcaman/concurrent-map"
 	"github.com/sirupsen/logrus"
-	"reflect"
-	"sync"
-	"sync/atomic"
-	"time"
 )
 
 func newServicePoller(fabricProvider *fabricProvider) *servicePoller {
