@@ -17,33 +17,40 @@
 package xgress_geneve
 
 import (
-	"log"
+	"encoding/binary"
 	"net"
 	"syscall"
 
-	"github.com/openziti/fabric/router/xgress"
-
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
+	"github.com/michaelquigley/pfxlog"
+	"github.com/openziti/fabric/router/xgress"
 )
 
 type listener struct{}
 
 func (self *listener) Listen(string, xgress.BindHandler) error {
 	go func() {
+		log := pfxlog.Logger()
 		// Open UDP socket to listen for Geneve Packets
 		conn, err := net.ListenPacket("udp", ":6081")
 		if err != nil {
-			log.Printf("geneve decapsulation, exiting: %v", err)
-			panic(err)
+			log.Errorf("failed to open geneve interface - udp: %v", err)
+			// error but return gracefully
+			return
+		} else {
+			log.Infof("geneve interface started successfully - udp: %s", conn.LocalAddr().String())
 		}
 		// Close it when done
 		defer conn.Close()
 		// Open a raw socket to send Modified Packets to Networking Stack
 		fd, err := syscall.Socket(syscall.AF_INET, syscall.SOCK_RAW, syscall.IPPROTO_RAW)
 		if err != nil {
-			log.Printf("Fail to open Socket :%v\n", err)
-			panic(err)
+			log.Errorf("failed to open geneve interface - fd: %v", err)
+			// error but return gracefully
+			return
+		} else {
+			log.Infof("geneve interface started successfully - fd: %d", fd)
 		}
 		// Close it when done
 		defer syscall.Close(fd)
@@ -52,8 +59,9 @@ func (self *listener) Listen(string, xgress.BindHandler) error {
 			buf := make([]byte, 9000)
 			n, _, _ := conn.ReadFrom(buf)
 			if err != nil {
-				log.Printf("error reading from buffer, exiting: %v", err)
-				panic(err)
+				log.Errorf("error reading from geneve interface - udp: %v", err)
+				// error but continue to read packets
+				continue
 			}
 			// Remove Geneve layer
 			packet := gopacket.NewPacket(buf[:n], layers.LayerTypeGeneve, gopacket.DecodeOptions{NoCopy: true})
@@ -68,10 +76,16 @@ func (self *listener) Listen(string, xgress.BindHandler) error {
 				Port: 0,
 				Addr: array4byte,
 			}
+			// Print packet details in debug or trace mode
+			log.Tracef("Raw Packet Details: %X", packet)
+			log.Tracef("Raw Modified Packet Details: %X", modifiedPacket)
+			log.Debugf("DIPv4: %v, SPort: %v, DPort: %v", net.IP(buf[56:60]), binary.BigEndian.Uint16(buf[60:62]), binary.BigEndian.Uint16(buf[62:64]))
 			// Send the new packet to be routed to Ziti TProxy
 			err = syscall.Sendto(fd, modifiedPacket, 0, &sockAddress)
 			if err != nil {
-				log.Printf("Failed to send modified packet to Socket: %v\n", err)
+				log.Errorf("failed to send modified packet to geneve interface - fd: %v\n", err)
+				// error but continue to send packets
+				continue
 			}
 		}
 	}()
@@ -79,5 +93,7 @@ func (self *listener) Listen(string, xgress.BindHandler) error {
 }
 
 func (self *listener) Close() error {
+	log := pfxlog.Logger()
+	log.Warn("closing geneve interface")
 	return nil
 }

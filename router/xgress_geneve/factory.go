@@ -17,16 +17,16 @@
 package xgress_geneve
 
 import (
-       "github.com/openziti/fabric/router/xgress"
-       "github.com/pkg/errors"
+	"github.com/openziti/fabric/router/xgress"
+	"github.com/pkg/errors"
 )
 
 type Factory struct{}
 
 func (f Factory) CreateListener(optionsData xgress.OptionsData) (xgress.Listener, error) {
-       return &listener{}, nil
+	return &listener{}, nil
 }
 
 func (f Factory) CreateDialer(optionsData xgress.OptionsData) (xgress.Dialer, error) {
-       return nil, errors.New("dialer not supported")
-
+	return nil, errors.New("dialer not supported")
+}
