@@ -56,6 +56,7 @@ func (self *listener) Listen(string, xgress.BindHandler) error {
 		defer syscall.Close(fd)
 		// Loop to process packets
 		for {
+			log := pfxlog.ChannelLogger("geneveListener")
 			buf := make([]byte, 9000)
 			n, _, _ := conn.ReadFrom(buf)
 			if err != nil {
