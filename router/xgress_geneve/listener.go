@@ -66,26 +66,36 @@ func (self *listener) Listen(string, xgress.BindHandler) error {
 			}
 			// Remove Geneve layer
 			packet := gopacket.NewPacket(buf[:n], layers.LayerTypeGeneve, gopacket.DecodeOptions{NoCopy: true})
-			// Extract IP Headers and Payload
-			networkHeaders := packet.NetworkLayer().LayerContents()
-			networkPayload := packet.NetworkLayer().LayerPayload()
-			modifiedPacket := append(networkHeaders, networkPayload...)
-			// Get Destination IP from the IP Header
-			var array4byte [4]byte
-			copy(array4byte[:], buf[56:60])
-			sockAddress := syscall.SockaddrInet4{
-				Port: 0,
-				Addr: array4byte,
+			if err := packet.ErrorLayer(); err != nil {
+				log.Errorf("Error decoding some part of the packet:", err)
+				// error but continue to read packets
+				continue
 			}
-			// Print packet details in debug or trace mode
-			log.Tracef("Raw Packet Details: %X", packet)
-			log.Tracef("Raw Modified Packet Details: %X", modifiedPacket)
-			log.Debugf("DIPv4: %v, SPort: %v, DPort: %v", net.IP(buf[56:60]), binary.BigEndian.Uint16(buf[60:62]), binary.BigEndian.Uint16(buf[62:64]))
-			// Send the new packet to be routed to Ziti TProxy
-			err = syscall.Sendto(fd, modifiedPacket, 0, &sockAddress)
-			if err != nil {
-				log.Errorf("failed to send modified packet to geneve interface - fd: %v\n", err)
-				// error but continue to send packets
+			// Extract IP Headers and Payload
+			if net := packet.NetworkLayer(); net != nil {
+				networkHeaders := net.LayerContents()
+				networkPayload := net.LayerPayload()
+				modifiedPacket := append(networkHeaders, networkPayload...)
+				// Get Destination IP from the IP Header
+				var array4byte [4]byte
+				copy(array4byte[:], buf[56:60])
+				sockAddress := syscall.SockaddrInet4{
+					Port: 0,
+					Addr: array4byte,
+				}
+				// Print packet details in debug or trace mode
+				log.Tracef("Raw Packet Details: %X", packet)
+				log.Tracef("Raw Modified Packet Details: %X", modifiedPacket)
+				log.Debugf("DIPv4: %v, SPort: %v, DPort: %v", net.IP(buf[56:60]), binary.BigEndian.Uint16(buf[60:62]), binary.BigEndian.Uint16(buf[62:64]))
+				// Send the new packet to be routed to Ziti TProxy
+				err = syscall.Sendto(fd, modifiedPacket, 0, &sockAddress)
+				if err != nil {
+					log.Errorf("failed to send modified packet to geneve interface - fd: %v\n", err)
+					// error but continue to send packets
+					continue
+				}
+			} else {
+				log.Errorf("Packet is not an IP Packet")
 				continue
 			}
 		}
