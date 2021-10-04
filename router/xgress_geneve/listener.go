@@ -58,7 +58,7 @@ func (self *listener) Listen(string, xgress.BindHandler) error {
 		for {
 			log := pfxlog.ChannelLogger("geneveListener")
 			buf := make([]byte, 9000)
-			n, _, _ := conn.ReadFrom(buf)
+			n, _, err := conn.ReadFrom(buf)
 			if err != nil {
 				log.Errorf("error reading from geneve interface - udp: %v", err)
 				// error but continue to read packets
@@ -72,10 +72,8 @@ func (self *listener) Listen(string, xgress.BindHandler) error {
 				continue
 			}
 			// Extract IP Headers and Payload
-			if net := packet.NetworkLayer(); net != nil {
-				networkHeaders := net.LayerContents()
-				networkPayload := net.LayerPayload()
-				modifiedPacket := append(networkHeaders, networkPayload...)
+			if ipNetwork := packet.NetworkLayer(); ipNetwork != nil {
+				modifiedPacket := append(ipNetwork.LayerContents(), ipNetwork.LayerPayload()...)
 				// Get Destination IP from the IP Header
 				var array4byte [4]byte
 				copy(array4byte[:], buf[56:60])
